@@ -54,21 +54,24 @@ pub fn part2(input: &str) -> usize {
         let prev_dial = dial;
         match m {
             Move::Left(amount) => {
-                touched_zero += amount / 100;
-                if dial > 0 && amount as isize % 100 >= dial {
-                    touched_zero += 1;
+                // The abs_diff calc below will claim to touch zero if the dial
+                // starts at 0 and it moves left. Offset that here.
+                if dial % 100 == 0 {
+                    touched_zero -= 1;
                 }
                 dial -= amount as isize;
-            }
-            Move::Right(amount) => {
-                touched_zero += amount / 100;
-                if dial > 0 && dial + (amount as isize % 100) >= 100 {
+
+                // The abs_diff calc below will claim to not touch zero if the
+                // dial finishes at 0 after it moves left. Offset that here.
+                if dial % 100 == 0 {
                     touched_zero += 1;
                 }
+            }
+            Move::Right(amount) => {
                 dial += amount as isize;
             }
         }
-        dial = dial.rem_euclid(100);
+        touched_zero += dial.div_euclid(100).abs_diff(prev_dial.div_euclid(100));
     }
     touched_zero
 }

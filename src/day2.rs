@@ -31,6 +31,9 @@ impl RangeSet {
     }
 }
 
+// repeat_seq(87, 1) -> 8787
+// repeat_seq(123, 2) -> 123123123
+// repeat_seq(67, 4) -> 6767676767
 fn repeat_seq(seq: usize, times: usize) -> usize {
     let num_digits = seq.ilog10() + 1;
     let shift = 10usize.pow(num_digits);
@@ -41,6 +44,24 @@ fn repeat_seq(seq: usize, times: usize) -> usize {
     result
 }
 
+// return the upper half digits of a value.
+// get_seq(1234)   -> 12
+// get_seq(987654) -> 987
+//
+// if the value has an odd number of digits round up the half and return the
+// lowest value that consumes that many digits.
+// get_seq(987)   -> 10
+// get_seq(12345) -> 100
+fn get_seq(x: usize) -> usize {
+    let num_digits = x.ilog10() + 1;
+    let base = 10usize.pow(num_digits / 2);
+    if num_digits.is_multiple_of(2) {
+        x / base
+    } else {
+        base
+    }
+}
+
 #[aoc_generator(day2)]
 fn parse(input: &str) -> RangeSet {
     RangeSet::new(input)
@@ -48,27 +69,27 @@ fn parse(input: &str) -> RangeSet {
 
 #[aoc(day2, part1)]
 fn part1(input: &RangeSet) -> usize {
-    let mut sum = 0;
-    for range in input.ranges() {
-        let get_seq = |x: usize| {
-            let num_digits = x.ilog10() + 1;
-            let base = 10usize.pow(num_digits / 2);
-            if num_digits.is_multiple_of(2) { x / base } else { base }
-        };
-        let start_seq = get_seq(*range.start());
-        let end_seq = get_seq(*range.end());
+    input
+        .ranges()
+        .into_iter()
+        .map(|range| -> usize {
+            let start_seq = get_seq(*range.start());
+            let end_seq = get_seq(*range.end());
 
-        sum += (start_seq..=end_seq)
-            .map(|seq| repeat_seq(seq, 1))
-            .filter(|value| range.contains(value))
-            .sum::<usize>()
-    }
-    sum
+            (start_seq..=end_seq)
+                .map(|seq| repeat_seq(seq, 1))
+                .filter(|value| range.contains(value))
+                .sum()
+        })
+        .sum()
 }
 
+// determine if `x` consists of a repeating sequence of digits.
 fn is_repeating_seq(x: usize) -> bool {
     let num_digits = x.ilog10() + 1;
-    for seq_digits in 1..=num_digits / 2 {
+    let sequence_digits =
+        (1..=num_digits / 2).filter(|&seq_len| num_digits.is_multiple_of(seq_len));
+    for seq_digits in sequence_digits {
         let mut x = x;
         let shift = 10usize.pow(seq_digits);
         let seq_pattern = x / 10usize.pow(num_digits - seq_digits);
@@ -87,13 +108,10 @@ fn is_repeating_seq(x: usize) -> bool {
 
 #[aoc(day2, part2)]
 fn part2(input: &RangeSet) -> usize {
-    let mut sum = 0;
-    for range in input.ranges() {
-        for value in range.clone() {
-            if is_repeating_seq(value) {
-                sum += value;
-            }
-        }
-    }
-    sum
+    input
+        .ranges()
+        .into_iter()
+        .flat_map(|range| range.clone())
+        .filter(|&value| is_repeating_seq(value))
+        .sum()
 }

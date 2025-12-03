@@ -20,7 +20,7 @@ fn max_joltage(input: &str, num_batteries: usize) -> usize {
             }
         }
         let column = (num_batteries - i) as u32;
-        result += (input[max_idx] - b'0') as usize * 10usize.pow(column - 1);
+        result = result * 10 + (input[max_idx] - b'0') as usize;
         next_battery_start_idx = max_idx + 1;
     }
     result

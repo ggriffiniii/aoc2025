@@ -71,7 +71,7 @@ fn parse(input: &str) -> RangeSet {
 fn part1(input: &RangeSet) -> usize {
     input
         .ranges()
-        .into_iter()
+        .iter()
         .map(|range| -> usize {
             let start_seq = get_seq(*range.start());
             let end_seq = get_seq(*range.end());
@@ -110,7 +110,7 @@ fn is_repeating_seq(x: usize) -> bool {
 fn part2(input: &RangeSet) -> usize {
     input
         .ranges()
-        .into_iter()
+        .iter()
         .flat_map(|range| range.clone())
         .filter(|&value| is_repeating_seq(value))
         .sum()

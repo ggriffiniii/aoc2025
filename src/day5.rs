@@ -17,18 +17,20 @@ impl IntervalSet {
                 ranges[merged_tail].end = std::cmp::max(ranges[merged_tail].end, ranges[idx].end);
             }
         }
-        ranges.truncate(merged_tail+1);
+        ranges.truncate(merged_tail + 1);
         IntervalSet(ranges)
     }
 
     fn contains(&self, needle: usize) -> bool {
-        self.0.binary_search_by(|range| {
-            match (range.start.cmp(&needle), range.end.cmp(&needle)) {
-                (Ordering::Less | Ordering::Equal, Ordering::Greater) => Ordering::Equal,
-                (Ordering::Greater, _) => Ordering::Greater,
-                (_, Ordering::Less | Ordering::Equal) => Ordering::Less,
-            }
-        }).is_ok()
+        self.0
+            .binary_search_by(
+                |range| match (range.start.cmp(&needle), range.end.cmp(&needle)) {
+                    (Ordering::Less | Ordering::Equal, Ordering::Greater) => Ordering::Equal,
+                    (Ordering::Greater, _) => Ordering::Greater,
+                    (_, Ordering::Less | Ordering::Equal) => Ordering::Less,
+                },
+            )
+            .is_ok()
     }
 
     fn ranges(&self) -> &[Range<usize>] {
@@ -39,38 +41,36 @@ impl IntervalSet {
 #[aoc(day5, part1)]
 fn part1(input: &str) -> usize {
     let mut lines = input.lines();
-    let fresh_ingredients: Vec<Range<usize>> = lines.by_ref().take_while(|line| !line.is_empty())
+    let fresh_ingredients: Vec<Range<usize>> = lines
+        .by_ref()
+        .take_while(|line| !line.is_empty())
         .map(|line| {
             let (start, end) = line.split_once('-').unwrap();
-            start.parse().unwrap()..end.parse::<usize>().unwrap()+1
+            start.parse().unwrap()..end.parse::<usize>().unwrap() + 1
         })
         .collect();
     let fresh_ingredients = IntervalSet::new(fresh_ingredients);
 
-    let available_ingredients: Vec<usize> = lines
-        .map(|line| line.parse().unwrap())
-        .collect();
+    let available_ingredients: Vec<usize> = lines.map(|line| line.parse().unwrap()).collect();
 
     available_ingredients
         .iter()
         .copied()
-        .filter(|&ingredient| {
-            fresh_ingredients.contains(ingredient)
-        })
+        .filter(|&ingredient| fresh_ingredients.contains(ingredient))
         .count()
 }
 
 #[aoc(day5, part2)]
 fn part2(input: &str) -> usize {
-    let fresh_ranges: Vec<Range<usize>> = input.lines().take_while(|line| !line.is_empty())
+    let fresh_ranges: Vec<Range<usize>> = input
+        .lines()
+        .take_while(|line| !line.is_empty())
         .map(|line| {
             let (start, end) = line.split_once('-').unwrap();
-            start.parse().unwrap()..end.parse::<usize>().unwrap()+1
+            start.parse().unwrap()..end.parse::<usize>().unwrap() + 1
         })
         .collect();
     let intervalset = IntervalSet::new(fresh_ranges);
 
-    intervalset.ranges().iter()
-        .map(|range| range.len())
-        .sum()
+    intervalset.ranges().iter().map(|range| range.len()).sum()
 }

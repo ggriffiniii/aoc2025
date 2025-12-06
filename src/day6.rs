@@ -43,7 +43,7 @@ fn part2(input: &str) -> usize {
         .iter()
         .copied()
         .enumerate()
-        .filter(|&(idx, val)| val == b'\n' || !val.is_ascii_whitespace())
+        .filter(|&(_idx, val)| val == b'\n' || !val.is_ascii_whitespace())
         .collect();
     let mut op_cols: Vec<_> = op_cols
         .windows(2)

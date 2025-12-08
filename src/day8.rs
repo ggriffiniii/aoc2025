@@ -1,70 +1,69 @@
-use std::cmp::Ordering;
-
 use aoc_runner_derive::aoc;
 
-#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
-struct Distance(f64);
-impl Eq for Distance {}
-impl Ord for Distance {
-    fn cmp(&self, rhs: &Self) -> Ordering {
-        self.partial_cmp(rhs).unwrap()
-    }
+#[derive(Debug)]
+struct CircuitGraph {
+    circuits: Vec<Vec<usize>>,
+    junction_box_to_circuit: Vec<Option<usize>>,
 }
-
-fn distance(a: (usize, usize, usize), b: (usize, usize, usize)) -> Distance {
-    let xd = a.0 - b.0;
-    let yd = a.1 - b.1;
-    let zd = a.2 - b.2;
-
-    Distance(((xd.pow(2) + yd.pow(2) + zd.pow(2)) as f64).sqrt())
-}
-
-fn get_circuit_sizes(connections: &[bool], num_junction_boxes: usize) -> Vec<usize> {
-    let mut visited = vec![false; num_junction_boxes];
-    fn get_circuit_connected_to(
-        junction_idx: usize,
-        connections: &[bool],
-        num_junction_boxes: usize,
-        visited: &mut [bool],
-    ) -> Vec<usize> {
-        visited[junction_idx] = true;
-        let row_start = junction_idx * num_junction_boxes;
-        let mut neighbors: Vec<_> = connections[row_start..row_start + num_junction_boxes]
-            .iter()
-            .copied()
-            .enumerate()
-            .filter(|&(_, connected)| connected)
-            .map(|(neighbor_id, _)| neighbor_id % num_junction_boxes)
-            .filter(|&neighbor_id| !visited[neighbor_id])
-            .collect();
-        for &neighbor in &neighbors {
-            visited[neighbor] = true;
+impl CircuitGraph {
+    fn new(max_junction_boxes: usize) -> Self {
+        CircuitGraph {
+            circuits: Vec::new(),
+            junction_box_to_circuit: vec![None; max_junction_boxes],
         }
-        for neighbor in neighbors.clone() {
-            neighbors.extend(get_circuit_connected_to(
-                neighbor,
-                connections,
-                num_junction_boxes,
-                visited,
-            ));
-        }
-        neighbors
     }
-    (0..num_junction_boxes)
-        .filter_map(|junction_idx| {
-            let neighbors = get_circuit_connected_to(
-                junction_idx,
-                connections,
-                num_junction_boxes,
-                &mut visited,
-            );
-            if neighbors.is_empty() {
-                None
-            } else {
-                Some(neighbors.len() + 1)
+
+    // join a and b returning the id of the circuit that was joined.
+    fn join(&mut self, a: usize, b: usize) -> usize {
+        let a_circuit = self.junction_box_to_circuit[a];
+        let b_circuit = self.junction_box_to_circuit[b];
+        match (a_circuit, b_circuit) {
+            (None, None) => {
+                self.circuits.push(vec![a, b]);
+                let new_circuit = self.circuits.len() - 1;
+                self.junction_box_to_circuit[a] = Some(new_circuit);
+                self.junction_box_to_circuit[b] = Some(new_circuit);
+                new_circuit
             }
-        })
-        .collect()
+            (Some(a_circuit), Some(b_circuit)) if a_circuit == b_circuit => a_circuit,
+            (Some(a_circuit), None) => {
+                self.circuits[a_circuit].push(b);
+                self.junction_box_to_circuit[b] = Some(a_circuit);
+                a_circuit
+            }
+            (None, Some(b_circuit)) => {
+                self.circuits[b_circuit].push(a);
+                self.junction_box_to_circuit[a] = Some(b_circuit);
+                b_circuit
+            }
+            (Some(a_circuit), Some(b_circuit)) => {
+                for &junction_id in &self.circuits[b_circuit] {
+                    self.junction_box_to_circuit[junction_id] = Some(a_circuit);
+                }
+                let mut b_junction_boxes = std::mem::take(&mut self.circuits[b_circuit]);
+                self.circuits[a_circuit].append(&mut b_junction_boxes);
+                a_circuit
+            }
+        }
+    }
+
+    fn get_circuit(&self, circuit: usize) -> &[usize] {
+        &self.circuits[circuit]
+    }
+
+    fn circuits(&self) -> impl Iterator<Item = &[usize]> {
+        self.circuits
+            .iter()
+            .filter(|boxes| !boxes.is_empty())
+            .map(|boxes| boxes.as_slice())
+    }
+}
+
+fn distance_squared(a: (usize, usize, usize), b: (usize, usize, usize)) -> usize {
+    let x_diff = a.0.abs_diff(b.0);
+    let y_diff = a.1.abs_diff(b.1);
+    let z_diff = a.2.abs_diff(b.2);
+    x_diff * x_diff + y_diff * y_diff + z_diff * z_diff
 }
 
 #[aoc(day8, part1)]
@@ -84,17 +83,16 @@ fn part1(input: &str) -> usize {
     let mut distances = Vec::new();
     for a in 0..junction_boxes.len() - 1 {
         for b in a + 1..junction_boxes.len() {
-            distances.push((a, b, distance(junction_boxes[a], junction_boxes[b])));
+            distances.push((a, b, distance_squared(junction_boxes[a], junction_boxes[b])));
         }
     }
     distances.sort_by_key(|&(_, _, distance)| distance);
 
-    let mut connections = vec![false; junction_boxes.len() * junction_boxes.len()];
+    let mut graph = CircuitGraph::new(junction_boxes.len());
     for &(a, b, _) in distances.iter().take(1000) {
-        connections[a * junction_boxes.len() + b] = true;
-        connections[b * junction_boxes.len() + a] = true;
+        graph.join(a, b);
     }
-    let mut circuit_sizes = get_circuit_sizes(&connections, junction_boxes.len());
+    let mut circuit_sizes: Vec<_> = graph.circuits().map(|boxes| boxes.len()).collect();
     circuit_sizes.sort_by_key(|&size| std::cmp::Reverse(size));
     circuit_sizes.into_iter().take(3).product()
 }
@@ -116,42 +114,15 @@ fn part2(input: &str) -> usize {
     let mut distances = Vec::new();
     for a in 0..junction_boxes.len() - 1 {
         for b in a + 1..junction_boxes.len() {
-            distances.push((a, b, distance(junction_boxes[a], junction_boxes[b])));
+            distances.push((a, b, distance_squared(junction_boxes[a], junction_boxes[b])));
         }
     }
     distances.sort_by_key(|&(_, _, distance)| distance);
 
-    let mut circuits = Vec::new();
-    let mut junction_to_circuit = vec![-1isize; junction_boxes.len()];
+    let mut graph = CircuitGraph::new(junction_boxes.len());
     for &(a, b, _) in distances.iter() {
-        let a_circuit = junction_to_circuit[a];
-        let b_circuit = junction_to_circuit[b];
-        if a_circuit < 0 && b_circuit < 0 {
-            circuits.push(vec![a, b]);
-            junction_to_circuit[a] = circuits.len() as isize - 1;
-            junction_to_circuit[b] = circuits.len() as isize - 1;
-            continue;
-        }
-        if a_circuit == b_circuit {
-            continue;
-        }
-        let circuit_joined = if a_circuit < 0 {
-            circuits[b_circuit as usize].push(a);
-            junction_to_circuit[a] = b_circuit;
-            b_circuit
-        } else if b_circuit < 0 {
-            circuits[a_circuit as usize].push(b);
-            junction_to_circuit[b] = a_circuit;
-            a_circuit
-        } else {
-            for &junction_id in &circuits[b_circuit as usize] {
-                junction_to_circuit[junction_id] = a_circuit;
-            }
-            let mut b_junction_boxes = std::mem::take(&mut circuits[b_circuit as usize]);
-            circuits[a_circuit as usize].append(&mut b_junction_boxes);
-            a_circuit
-        };
-        if circuits[circuit_joined as usize].len() == junction_boxes.len() {
+        let circuit = graph.join(a, b);
+        if graph.get_circuit(circuit).len() == junction_boxes.len() {
             // All junction boxes are part of a single circuit.
             return junction_boxes[a].0 * junction_boxes[b].0;
         }

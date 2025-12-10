@@ -1,3 +1,5 @@
+#![feature(cmp_minmax)]
+
 pub mod day1;
 mod day2;
 mod day3;

@@ -9,12 +9,12 @@ use std::{
 
 use aoc_runner_derive::aoc;
 
-//const EXAMPLE: &str = r#"[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
-//[####..##.#] (0,1,2,3,4,6) (0,7,9) (0,1,2,3,5,6,7,8,9) (1,2,5,6,7,9) (1,3,8,9) (1,2,3,4,5,6,7,8) (1,2,3,6,7,9) (5,6,7,9) (1,2,3,6,7) (1,4,6) {16,95,61,61,32,52,85,65,42,64}
-//[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
-//[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}"#;
+const EXAMPLE: &str = r#"[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
+[####..##.#] (0,1,2,3,4,6) (0,7,9) (0,1,2,3,5,6,7,8,9) (1,2,5,6,7,9) (1,3,8,9) (1,2,3,4,5,6,7,8) (1,2,3,6,7,9) (5,6,7,9) (1,2,3,6,7) (1,4,6) {16,95,61,61,32,52,85,65,42,64}
+[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
+[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}"#;
 ////[####..##..] (0,4,5,6,7,9) (0,2,4,6,9) (0,1,2,3,5,6,7,8) (1,9) (0,1,3,4,5,6,7,8) (0,1,3,7,9) (3,7) (1,3,4,6,7,9) (1,2,3,4,5,7,8,9) (0,1,2,6,8) (0,1,2,4,8,9) (0,1,2,7,8,9) (1,3,5,7,8) {211,227,193,67,188,46,42,85,204,212}"#;
-const EXAMPLE: &str = r#"[##......##] (2) (0,1,2,4,5,7,8,9) (0,1,2,3,4,5,8,9) (0,2,4,5,6,7,9) (0,1,4,7) (0,4,9) (0,1,6,8) (4,6) (5) (3,4,6,8) (0,3,5,6) (0,3,5,6,7,9) {58,20,22,42,60,49,45,8,26,37}"#;
+//const EXAMPLE: &str = r#"[##......##] (2) (0,1,2,4,5,7,8,9) (0,1,2,3,4,5,8,9) (0,2,4,5,6,7,9) (0,1,4,7) (0,4,9) (0,1,6,8) (4,6) (5) (3,4,6,8) (0,3,5,6) (0,3,5,6,7,9) {58,20,22,42,60,49,45,8,26,37}"#;
 
 #[derive(Debug)]
 struct Machine {
@@ -249,66 +249,178 @@ fn get_global_bounds(
     (global_min, global_max)
 }
 
-fn solve_system(
-    matrix: &Vec<Vec<f64>>,
-    pivot_cols: &Vec<usize>,
-    independent_values: &HashMap<usize, f64>,
-) -> Vec<f64> {
-    let rows = matrix.len();
-    if rows == 0 {
-        return vec![];
-    }
-    let num_vars = matrix[0].len() - 1; // Exclude RHS column
+//fn solve_system(
+//    matrix: &Vec<Vec<f64>>,
+//    pivot_cols: &Vec<usize>,
+//    independent_values: &HashMap<usize, f64>,
+//) -> Vec<f64> {
+//    let rows = matrix.len();
+//    if rows == 0 {
+//        return vec![];
+//    }
+//    let num_vars = matrix[0].len() - 1; // Exclude RHS column
+//
+//    // 1. Initialize the solution vector with 0.0
+//    let mut solution = vec![0.0; num_vars];
+//
+//    // 2. Fill in the Independent Variables (User Inputs)
+//    // We do this first because the Dependent variables rely on these numbers.
+//    for (&col_idx, &val) in independent_values {
+//        if pivot_cols.contains(&col_idx) {
+//            println!(
+//                "Warning: Column {} is a Dependent Variable (Pivot). Your input for it will be overwritten.",
+//                col_idx
+//            );
+//        } else {
+//            solution[col_idx] = val;
+//        }
+//    }
+//
+//    // 3. Calculate the Dependent Variables
+//    // We iterate through the RREF matrix. Each row defines exactly one Dependent Variable.
+//    for row in matrix {
+//        // Find the pivot (the first 1.0) in this row to identify which variable it solves for
+//        let pivot_idx = match row[0..num_vars]
+//            .iter()
+//            .position(|&x| (x - 1.0).abs() < EPSILON)
+//        {
+//            Some(i) => i,
+//            None => continue, // Skip empty rows (0=0)
+//        };
+//
+//        // Start calculation: Dependent_Var = RHS - (Everything Else)
+//        let rhs = row[num_vars];
+//        let mut calculated_value = rhs;
+//
+//        for col in 0..num_vars {
+//            if col != pivot_idx {
+//                // Subtract the term: Coefficient * Value
+//                // (If the variable is 0.0, this does nothing, which is fine)
+//                let coeff = row[col];
+//                let val = solution[col];
+//
+//                if coeff.abs() > EPSILON {
+//                    calculated_value -= coeff * val;
+//                }
+//            }
+//        }
+//
+//        solution[pivot_idx] = calculated_value;
+//    }
+//
+//    solution
+//}
 
-    // 1. Initialize the solution vector with 0.0
-    let mut solution = vec![0.0; num_vars];
-
-    // 2. Fill in the Independent Variables (User Inputs)
-    // We do this first because the Dependent variables rely on these numbers.
-    for (&col_idx, &val) in independent_values {
-        if pivot_cols.contains(&col_idx) {
-            println!(
-                "Warning: Column {} is a Dependent Variable (Pivot). Your input for it will be overwritten.",
-                col_idx
-            );
-        } else {
-            solution[col_idx] = val;
+fn recursive_solve(
+    all_buttons: &Vec<u16>,
+    dep_matrix: &Vec<Vec<i64>>,
+    indep_vars: &Vec<(usize, Range<usize>)>,
+    current_idx: usize,
+    current_target: Vec<i64>,
+    current_press_sum: i64,
+) -> Option<i64> {
+    // BASE CASE: We have assigned values to all Independent Variables.
+    // Now we solve the remaining square system.
+    if current_idx >= indep_vars.len() {
+        if let Some(solution) = solve_square_system(dep_matrix, &current_target) {
+            // Check for valid non-negative solution
+            if solution.iter().all(|&x| x >= 0) {
+                let dep_sum: i64 = solution.iter().sum();
+                return Some(current_press_sum + dep_sum);
+            }
         }
+        return None;
     }
 
-    // 3. Calculate the Dependent Variables
-    // We iterate through the RREF matrix. Each row defines exactly one Dependent Variable.
-    for row in matrix {
-        // Find the pivot (the first 1.0) in this row to identify which variable it solves for
-        let pivot_idx = match row[0..num_vars]
-            .iter()
-            .position(|&x| (x - 1.0).abs() < EPSILON)
-        {
-            Some(i) => i,
-            None => continue, // Skip empty rows (0=0)
-        };
+    // RECURSIVE STEP: Iterate through possible press counts for the current independent button.
+    let mut min_total = None;
 
-        // Start calculation: Dependent_Var = RHS - (Everything Else)
-        let rhs = row[num_vars];
-        let mut calculated_value = rhs;
+    // Calculate a safe upper bound to prevent infinite loops.
+    // We can't press the button more times than would exceed the target on any dimension.
+    // (Assuming buttons only have positive values).
+//    let mut max_presses = indep_vars[current_idx].1.end.min(current_target[current_idx]);
 
-        for col in 0..num_vars {
-            if col != pivot_idx {
-                // Subtract the term: Coefficient * Value
-                // (If the variable is 0.0, this does nothing, which is fine)
-                let coeff = row[col];
-                let val = solution[col];
+    let current_var = &indep_vars[current_idx];
+    for presses in indep_vars[current_idx].1.clone() {
+        let presses = presses as i64;
+        // Calculate new residual target
+        let mut next_target = current_target.clone();
+        let mut possible = true;
 
-                if coeff.abs() > EPSILON {
-                    calculated_value -= coeff * val;
-                }
+        let button_idx = indep_vars[current_idx].0;
+        for i in 0..next_target.len() {
+            if all_buttons[button_idx] & (1 << i) != 0 {
+                next_target[i] -= 1;
             }
         }
 
-        solution[pivot_idx] = calculated_value;
+        if !possible { break; } // Optimization: Stop iterating if we overshoot
+
+        // Recurse to the next independent variable
+        if let Some(result) = recursive_solve(
+            all_buttons, 
+            dep_matrix, 
+            indep_vars, 
+            current_idx + 1, 
+            next_target, 
+            current_press_sum + presses
+        ) {
+            // We want the MINIMUM total presses
+            min_total = Some(min_total.map_or(result, |m: i64| m.min(result)));
+        }
     }
 
-    solution
+    min_total
+}
+
+// Standard Fraction-Free Gaussian Solver (Same as before)
+fn solve_square_system(coeffs: &Vec<Vec<i64>>, target: &Vec<i64>) -> Option<Vec<i64>> {
+    let size = target.len();
+    // Build Augmented Matrix
+    let mut mat: Vec<Vec<i64>> = coeffs.iter().enumerate()
+        .map(|(i, row)| {
+            let mut r = row.clone();
+            r.push(target[i]);
+            r
+        }).collect();
+
+    // Forward Elimination
+    for i in 0..size {
+        if mat[i][i] == 0 {
+            let mut swapped = false;
+            for k in i+1..size {
+                if mat[k][i] != 0 {
+                    mat.swap(i, k);
+                    swapped = true;
+                    break;
+                }
+            }
+            if !swapped { return None; }
+        }
+        for k in i+1..size {
+            let pivot = mat[i][i];
+            let target_val = mat[k][i];
+            if target_val == 0 { continue; }
+            let row_i = mat[i].clone();
+            for j in i..=size {
+                mat[k][j] = (pivot * mat[k][j]) - (target_val * row_i[j]);
+            }
+        }
+    }
+
+    // Back Substitution
+    let mut x = vec![0; size];
+    for i in (0..size).rev() {
+        let mut sum = 0;
+        for j in i+1..size {
+            sum += mat[i][j] * x[j];
+        }
+        let rhs = mat[i][size] - sum;
+        let coeff = mat[i][i];
+        if coeff == 0 || rhs % coeff != 0 { return None; }
+        x[i] = rhs / coeff;
+    }
+    Some(x)
 }
 
 /// To solve the minimum number of button presses that satisfy the joltage
@@ -385,7 +497,9 @@ fn solve_system(
 /// In other words as we increment D from 0 to infinity. If D = 1 solves to 11
 /// button presses and D = 2 solves to 13 button presses, I think it's safe to
 /// stop and say that D = 2 is the minimum.
-fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> usize {
+/// 
+/// 
+fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> i64 {
     let mut matrix = Vec::new();
     for (jolt_idx, &jolt_value) in m.jolts.iter().enumerate() {
         let mut row: Vec<_> = m
@@ -417,6 +531,28 @@ fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> usize {
         .collect();
     independent_vars.sort_by_key(|(_, bounds)| cmp::Reverse(bounds.len()));
     dbg!(&independent_vars);
+
+    let target: Vec<_> = m.jolts.iter().map(|&i| i as i64).collect();
+    let dep_indices = pivots.clone();
+    let dep_matrix:Vec<Vec<_>> = (0..target.len()).map(|target_idx| {
+        dep_indices.iter().map(|&button_idx| (m.buttons[button_idx] & (1 << target_idx) != 0) as i64).collect()
+    }).collect();
+    dbg!(&dep_matrix);
+
+    let min_presses = recursive_solve(
+        &m.buttons,
+        &dep_matrix,
+        &independent_vars,
+        0,
+        target,
+        0
+    );
+    match min_presses {
+        Some(x) => x,
+        None => panic!("no solution"),
+    }
+}
+    /*
 
     let mut independent_var_state: Vec<_> = independent_vars
         .iter()
@@ -479,6 +615,8 @@ fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> usize {
     }
     dbg!(min) as usize
 }
+    */
+
 
 fn increment_independent_vars(vars: &[(usize, Range<usize>)], state: &mut Vec<usize>) {
     for (idx, var_state) in state.iter_mut().enumerate().rev() {
@@ -491,7 +629,7 @@ fn increment_independent_vars(vars: &[(usize, Range<usize>)], state: &mut Vec<us
 }
 
 #[aoc(day10, part2)]
-fn part2(input: &str) -> usize {
+fn part2(input: &str) -> i64 {
     let input = EXAMPLE;
     let machines: Vec<_> = input
         .lines()

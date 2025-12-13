@@ -91,7 +91,6 @@ fn part1(input: &str) -> usize {
 
 const EPSILON: f64 = 1e-9;
 
-// The struct that 'recursive_solve' uses
 #[derive(Debug, Clone)]
 pub struct Constraint {
     // The coefficients for your independent variables (e.g., indices 10 and 11)
@@ -263,8 +262,49 @@ fn recursive_find_min_button_presses(
     let mut min_val = 0.0;
     let mut max_val = max_button_presses;
 
-    // Further bound the last free variable.
-    if depth == free_vars_values.len() - 1 {
+    if depth < free_vars_values.len() - 1 {
+        // If the current free var is participating in a positive way to the
+        // target and no other free vars are participating in a negative way
+        // then the max value the variable could have is the target /
+        // coefficient.
+        let limit = constraints
+            .iter()
+            .filter_map(|c| {
+                if c.coeffs[depth] <= 0.0 {
+                    return None;
+                }
+                let mut current_rhs = c.target;
+                let mut min_positive_coeff: Option<f64> = None;
+                for (idx, &coeff) in c.coeffs.iter().enumerate() {
+                    if idx < depth {
+                        current_rhs -= coeff * free_vars_values[idx];
+                    }
+                    if coeff.abs() < EPSILON {
+                        continue;
+                    }
+                    if coeff < 0.0 {
+                        return None;
+                    }
+                    // coeff > 0.0
+                    min_positive_coeff = match min_positive_coeff {
+                        Some(x) => Some(x.min(coeff)),
+                        None => Some(coeff),
+                    };
+                }
+                min_positive_coeff.map(|coeff| current_rhs / coeff)
+            })
+            .reduce(f64::min);
+
+        if let Some(limit) = limit
+            && limit < max_val
+        {
+            max_val = limit;
+        }
+    } else {
+        // We can bound the last free variable more precisely because we know
+        // the value for all other variables at this point so we don't need to
+        // worry about subsequent negative coefficients offsetting our positive
+        // contributions.
         for c in constraints {
             let coeff = c.coeffs[depth];
             if coeff == 0.0 {

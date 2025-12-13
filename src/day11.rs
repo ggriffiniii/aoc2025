@@ -45,7 +45,6 @@ fn get_path_counts(
 
 #[aoc(day11, part1)]
 fn part1(input: &str) -> usize {
-    //let input = EXAMPLE;
     let mut id_map = IDMap::new();
     let mut devices = Vec::new();
     for line in input.lines() {
@@ -112,7 +111,6 @@ fn get_path_counts_from_srv(
 
 #[aoc(day11, part2)]
 fn part2(input: &str) -> usize {
-    //let input = EXAMPLE;
     let mut id_map = IDMap::new();
     let mut devices = Vec::new();
     for line in input.lines() {
@@ -132,8 +130,5 @@ fn part2(input: &str) -> usize {
     let fft = id_map.get_id("fft");
     let mut path_counts = vec![[None; 4]; id_map.next_id];
     path_counts[out] = [Some(0), Some(0), Some(0), Some(1)]; // initialize the out path count as one that needs neither Dac nor Fft.
-    dbg!(&id_map);
-    dbg!(&devices.len());
-    dbg!(&path_counts.len());
     get_path_counts_from_srv(srv, &devices, Needs::DacAndFft, &mut path_counts, dac, fft)
 }

@@ -1,20 +1,7 @@
 use core::f64;
-use std::{
-    cmp,
-    collections::{HashMap, VecDeque},
-    convert::Infallible,
-    ops::Range,
-    str::FromStr,
-};
+use std::{collections::VecDeque, convert::Infallible, str::FromStr};
 
 use aoc_runner_derive::aoc;
-
-const EXAMPLE: &str = r#"[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
-[####..##.#] (0,1,2,3,4,6) (0,7,9) (0,1,2,3,5,6,7,8,9) (1,2,5,6,7,9) (1,3,8,9) (1,2,3,4,5,6,7,8) (1,2,3,6,7,9) (5,6,7,9) (1,2,3,6,7) (1,4,6) {16,95,61,61,32,52,85,65,42,64}
-[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
-[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}"#;
-////[####..##..] (0,4,5,6,7,9) (0,2,4,6,9) (0,1,2,3,5,6,7,8) (1,9) (0,1,3,4,5,6,7,8) (0,1,3,7,9) (3,7) (1,3,4,6,7,9) (1,2,3,4,5,7,8,9) (0,1,2,6,8) (0,1,2,4,8,9) (0,1,2,7,8,9) (1,3,5,7,8) {211,227,193,67,188,46,42,85,204,212}"#;
-//const EXAMPLE: &str = r#"[##......##] (2) (0,1,2,4,5,7,8,9) (0,1,2,3,4,5,8,9) (0,2,4,5,6,7,9) (0,1,4,7) (0,4,9) (0,1,6,8) (4,6) (5) (3,4,6,8) (0,3,5,6) (0,3,5,6,7,9) {58,20,22,42,60,49,45,8,26,37}"#;
 
 #[derive(Debug)]
 struct Machine {
@@ -27,7 +14,7 @@ impl FromStr for Machine {
 
     fn from_str(input: &str) -> Result<Machine, Infallible> {
         let (lights_input, input) = input.split_once("] ").unwrap();
-        let lights_input = &lights_input[1..].as_bytes();
+        let lights_input = &lights_input.as_bytes()[1..];
         assert!(lights_input.len() <= 10);
         let lights = lights_input
             .iter()
@@ -95,7 +82,6 @@ fn find_min_button_presses(m: &Machine) -> usize {
 
 #[aoc(day10, part1)]
 fn part1(input: &str) -> usize {
-    //let input = EXAMPLE;
     let machines: Vec<_> = input
         .lines()
         .map(|input| Machine::from_str(input).unwrap())
@@ -105,322 +91,230 @@ fn part1(input: &str) -> usize {
 
 const EPSILON: f64 = 1e-9;
 
-/// Transforms a matrix into Reduced Row Echelon Form (RREF) in place.
-/// Returns a list of column indices that contain pivots (Dependent Variables).
-fn rref(matrix: &mut Vec<Vec<f64>>) -> Vec<usize> {
-    let rows = matrix.len();
-    if rows == 0 {
-        return vec![];
+// The struct that 'recursive_solve' uses
+#[derive(Debug, Clone)]
+pub struct Constraint {
+    // The coefficients for your independent variables (e.g., indices 10 and 11)
+    pub coeffs: Vec<f64>,
+    // The target value (RHS) of the row
+    pub target: f64,
+}
+
+pub fn parse_rref_into_constraints(
+    matrix: &[Vec<f64>],
+    pivots: &[usize],
+    total_vars: usize,
+) -> Vec<Constraint> {
+    let cols = matrix[0].len();
+    let free_var_indices: Vec<usize> = (0..total_vars).filter(|i| !pivots.contains(i)).collect();
+
+    let mut constraints = Vec::new();
+
+    for matrix_row in matrix {
+        let free_var_idx = matrix_row
+            .iter()
+            .enumerate()
+            .filter(|&(_idx, &v)| v != 0.0)
+            .map(|(idx, _v)| idx)
+            .next();
+
+        if let Some(_dep_idx) = free_var_idx {
+            let mut row_coeffs = Vec::new();
+            for &free_var_idx in &free_var_indices {
+                row_coeffs.push(matrix_row[free_var_idx]);
+            }
+
+            constraints.push(Constraint {
+                coeffs: row_coeffs,
+                target: matrix_row[cols - 1],
+            });
+        }
     }
+
+    constraints
+}
+
+/// Returns the RREF matrix and a list of pivot column indices.
+pub fn rref(mut matrix: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<usize>) {
+    let rows = matrix.len();
     let cols = matrix[0].len();
 
     let mut pivot_row = 0;
-    let mut pivot_cols = Vec::new();
+    let mut pivot_indices = Vec::new();
 
-    for col in 0..cols - 1 {
-        // Iterate columns, excluding the RHS result column
+    for col in 0..cols {
         if pivot_row >= rows {
             break;
         }
 
-        // 1. Find a row with a non-zero entry in this column (Pivot selection)
-        let mut curr = pivot_row;
-        while curr < rows && matrix[curr][col].abs() < EPSILON {
-            curr += 1;
+        let mut max_row = pivot_row;
+        let mut max_val = matrix[pivot_row][col].abs();
+
+        for i in (pivot_row + 1)..rows {
+            let val = matrix[i][col].abs();
+            if val > max_val {
+                max_val = val;
+                max_row = i;
+            }
         }
 
-        // If no row has a value here, this is a Free Variable (Independent)
-        if curr == rows {
+        // If the column is effectively all zeros, skip it (it's a free variable)
+        if max_val < EPSILON {
             continue;
         }
 
-        // 2. Swap the found row up to the pivot position
-        matrix.swap(pivot_row, curr);
-        pivot_cols.push(col);
+        // Swap the best pivot to the current row
+        matrix.swap(pivot_row, max_row);
+        pivot_indices.push(col);
 
-        // 3. Normalize the pivot row (Divide by pivot so it becomes 1.0)
+        // Divide the entire row by the pivot so the pivot becomes exactly 1.0
         let pivot_val = matrix[pivot_row][col];
+
         for j in col..cols {
-            // Optimize: Start from 'col' as left is already 0
             matrix[pivot_row][j] /= pivot_val;
         }
 
-        // 4. Eliminate all other rows
         for i in 0..rows {
             if i != pivot_row {
                 let factor = matrix[i][col];
                 if factor.abs() > EPSILON {
                     for j in col..cols {
-                        let val = matrix[pivot_row][j];
-                        matrix[i][j] -= factor * val;
+                        matrix[i][j] -= factor * matrix[pivot_row][j];
+
+                        if matrix[i][j].abs() < EPSILON {
+                            matrix[i][j] = 0.0;
+                        }
                     }
+                    matrix[i][col] = 0.0;
                 }
             }
         }
-
         pivot_row += 1;
     }
 
-    pivot_cols
+    (matrix, pivot_indices)
 }
 
-fn get_global_bounds(
-    target_var: usize,
-    matrix: &Vec<Vec<f64>>,
-    pivot_cols: &Vec<usize>,
-) -> (f64, f64) {
-    let num_vars = matrix[0].len() - 1;
-    let mut global_min = 0.0;
-    let mut global_max = f64::INFINITY;
+fn solve_dependent_vars(
+    rref_matrix: &[Vec<f64>],
+    pivots: &[usize],
+    free_vars_indices: &[usize],
+    free_vars_values: &[f64],
+) -> Vec<f64> {
+    let num_rows = rref_matrix.len();
+    let num_cols = rref_matrix[0].len();
+    let total_vars = num_cols - 1;
 
-    for row in matrix {
-        // 1. Identify Dependent Variable for this row
-        let pivot_idx = match row[0..num_vars]
-            .iter()
-            .position(|&x| (x - 1.0).abs() < 1e-9)
-        {
-            Some(i) => i,
-            None => continue,
-        };
+    let mut solution = vec![0.0; total_vars];
 
-        let target_coeff = row[target_var];
-        if target_coeff.abs() < 1e-9 {
+    for (i, &idx) in free_vars_indices.iter().enumerate() {
+        solution[idx] = free_vars_values[i];
+    }
+
+    for r in 0..num_rows {
+        if r >= pivots.len() {
             continue;
-        } // D is not in this equation
+        }
+        let pivot_idx = pivots[r];
 
-        let rhs = row[num_vars];
+        let target_val = rref_matrix[r][num_cols - 1];
 
-        // Equation: Pivot + (Target_Coeff * D) + (Other_Terms) = RHS
-        // Pivot = RHS - (Target_Coeff * D) - (Other_Terms)
-        // Constraint: Pivot >= 0
-        // So: RHS - (Target_Coeff * D) - (Other_Terms) >= 0
+        let mut sum_free_parts = 0.0;
 
-        // 2. Analyze "Other Terms" (Independent Variables other than D)
-        // We need to know: Can "Other_Terms" help us or hurt us?
-        let mut best_case_help = 0.0;
+        for (i, &free_idx) in free_vars_indices.iter().enumerate() {
+            let coeff = rref_matrix[r][free_idx];
+            let val = free_vars_values[i];
+            sum_free_parts += coeff * val;
+        }
 
-        for col in 0..num_vars {
-            if col != pivot_idx && col != target_var && row[col].abs() > 1e-9 {
-                // This is another independent variable (like F)
-                let coeff = row[col];
+        solution[pivot_idx] = target_val - sum_free_parts;
+    }
 
-                // If we want to MAXIMIZE D, we want this term to be as POSITIVE as possible
-                // so it cancels out negative pressure.
+    solution
+}
 
-                // Term in equation is: - (coeff * Indep_Var)
-                // If coeff is NEGATIVE (e.g., -1.0 * F), then -(-1*F) = +F.
-                // A positive F gives us MORE room for D.
+fn recursive_find_min_button_presses(
+    rref: &[Vec<f64>],
+    pivots: &[usize],
+    constraints: &[Constraint],
+    depth: usize,
+    free_vars_indices: &[usize],
+    free_vars_values: &mut [f64],
+    max_button_presses: f64,
+    min_button_presses: &mut f64,
+) {
+    if depth == free_vars_values.len() {
+        let all_var_values =
+            solve_dependent_vars(rref, pivots, free_vars_indices, free_vars_values);
+        if all_var_values
+            .iter()
+            .any(|value| value.round() < 0.0 || (value - value.round()).abs() > EPSILON)
+        {
+            // Can't have negative or fractional button pushes.
+            return;
+        }
+        let total_button_presses: f64 = all_var_values.iter().sum();
+        *min_button_presses = total_button_presses.min(*min_button_presses);
 
-                if coeff < 0.0 {
-                    // It helps us! What is the MAX value F can take?
-                    // (This requires knowing F's bounds. For now, let's assume F can go up to infinity
-                    // or some known limit. If F is bounded by another row, this gets complex recursively.)
-                    // simpler approach: Just add 0 if we assume worst case,
-                    // or calculate F's max if we want global max.
+        return;
+    }
 
-                    // For your specific case: F adds to D's limit.
-                    // If we assume F can be anything, D is effectively unbounded (Infinite).
-                    best_case_help = f64::INFINITY;
-                } else {
-                    // It hurts us! The best case is F = 0.
-                    best_case_help += 0.0;
+    // Recurse through all possible combinations of the remaining free variables.
+    let mut min_val = 0.0;
+    let mut max_val = max_button_presses;
+
+    // Further bound the last free variable.
+    if depth == free_vars_values.len() - 1 {
+        for c in constraints {
+            let coeff = c.coeffs[depth];
+            if coeff == 0.0 {
+                continue;
+            }
+
+            let mut current_rhs = c.target;
+            for (coeff, free_var_value) in c.coeffs[..depth].iter().zip(&free_vars_values[..depth])
+            {
+                current_rhs -= coeff * free_var_value;
+            }
+
+            if coeff > 0.0 {
+                if current_rhs < 0.0 {
+                    return;
+                }
+                let limit = current_rhs / coeff;
+                if limit < max_val {
+                    max_val = limit;
+                }
+            } else {
+                let abs_coeff = coeff.abs();
+                let limit = (-current_rhs + abs_coeff - 1.0) / abs_coeff;
+                if limit > min_val {
+                    min_val = limit;
                 }
             }
         }
-
-        // 3. Solve for D
-        // Basic: RHS + best_case_help >= Target_Coeff * D
-
-        if target_coeff > 0.0 {
-            // D <= (RHS + Help) / Coeff
-            let limit = (rhs + best_case_help) / target_coeff;
-            if limit < global_max {
-                global_max = limit;
-            }
-        } else {
-            // D >= (RHS + Help) / Coeff (Sign flips)
-            let limit = (rhs + best_case_help) / target_coeff;
-            if limit > global_min {
-                global_min = limit;
-            }
-        }
     }
 
-    (global_min, global_max)
-}
+    let min_val = min_val.trunc() as i64;
+    let max_val = max_val.ceil() as i64;
 
-//fn solve_system(
-//    matrix: &Vec<Vec<f64>>,
-//    pivot_cols: &Vec<usize>,
-//    independent_values: &HashMap<usize, f64>,
-//) -> Vec<f64> {
-//    let rows = matrix.len();
-//    if rows == 0 {
-//        return vec![];
-//    }
-//    let num_vars = matrix[0].len() - 1; // Exclude RHS column
-//
-//    // 1. Initialize the solution vector with 0.0
-//    let mut solution = vec![0.0; num_vars];
-//
-//    // 2. Fill in the Independent Variables (User Inputs)
-//    // We do this first because the Dependent variables rely on these numbers.
-//    for (&col_idx, &val) in independent_values {
-//        if pivot_cols.contains(&col_idx) {
-//            println!(
-//                "Warning: Column {} is a Dependent Variable (Pivot). Your input for it will be overwritten.",
-//                col_idx
-//            );
-//        } else {
-//            solution[col_idx] = val;
-//        }
-//    }
-//
-//    // 3. Calculate the Dependent Variables
-//    // We iterate through the RREF matrix. Each row defines exactly one Dependent Variable.
-//    for row in matrix {
-//        // Find the pivot (the first 1.0) in this row to identify which variable it solves for
-//        let pivot_idx = match row[0..num_vars]
-//            .iter()
-//            .position(|&x| (x - 1.0).abs() < EPSILON)
-//        {
-//            Some(i) => i,
-//            None => continue, // Skip empty rows (0=0)
-//        };
-//
-//        // Start calculation: Dependent_Var = RHS - (Everything Else)
-//        let rhs = row[num_vars];
-//        let mut calculated_value = rhs;
-//
-//        for col in 0..num_vars {
-//            if col != pivot_idx {
-//                // Subtract the term: Coefficient * Value
-//                // (If the variable is 0.0, this does nothing, which is fine)
-//                let coeff = row[col];
-//                let val = solution[col];
-//
-//                if coeff.abs() > EPSILON {
-//                    calculated_value -= coeff * val;
-//                }
-//            }
-//        }
-//
-//        solution[pivot_idx] = calculated_value;
-//    }
-//
-//    solution
-//}
-
-fn recursive_solve(
-    all_buttons: &Vec<u16>,
-    dep_matrix: &Vec<Vec<i64>>,
-    indep_vars: &Vec<(usize, Range<usize>)>,
-    current_idx: usize,
-    current_target: Vec<i64>,
-    current_press_sum: i64,
-) -> Option<i64> {
-    // BASE CASE: We have assigned values to all Independent Variables.
-    // Now we solve the remaining square system.
-    if current_idx >= indep_vars.len() {
-        if let Some(solution) = solve_square_system(dep_matrix, &current_target) {
-            // Check for valid non-negative solution
-            if solution.iter().all(|&x| x >= 0) {
-                let dep_sum: i64 = solution.iter().sum();
-                return Some(current_press_sum + dep_sum);
-            }
-        }
-        return None;
+    if min_val > max_val {
+        return;
     }
 
-    // RECURSIVE STEP: Iterate through possible press counts for the current independent button.
-    let mut min_total = None;
-
-    // Calculate a safe upper bound to prevent infinite loops.
-    // We can't press the button more times than would exceed the target on any dimension.
-    // (Assuming buttons only have positive values).
-//    let mut max_presses = indep_vars[current_idx].1.end.min(current_target[current_idx]);
-
-    let current_var = &indep_vars[current_idx];
-    for presses in indep_vars[current_idx].1.clone() {
-        let presses = presses as i64;
-        // Calculate new residual target
-        let mut next_target = current_target.clone();
-        let mut possible = true;
-
-        let button_idx = indep_vars[current_idx].0;
-        for i in 0..next_target.len() {
-            if all_buttons[button_idx] & (1 << i) != 0 {
-                next_target[i] -= 1;
-            }
-        }
-
-        if !possible { break; } // Optimization: Stop iterating if we overshoot
-
-        // Recurse to the next independent variable
-        if let Some(result) = recursive_solve(
-            all_buttons, 
-            dep_matrix, 
-            indep_vars, 
-            current_idx + 1, 
-            next_target, 
-            current_press_sum + presses
-        ) {
-            // We want the MINIMUM total presses
-            min_total = Some(min_total.map_or(result, |m: i64| m.min(result)));
-        }
+    for val in min_val..=max_val {
+        free_vars_values[depth] = val as f64;
+        recursive_find_min_button_presses(
+            rref,
+            pivots,
+            constraints,
+            depth + 1,
+            free_vars_indices,
+            free_vars_values,
+            max_button_presses,
+            min_button_presses,
+        );
     }
-
-    min_total
-}
-
-// Standard Fraction-Free Gaussian Solver (Same as before)
-fn solve_square_system(coeffs: &Vec<Vec<i64>>, target: &Vec<i64>) -> Option<Vec<i64>> {
-    let size = target.len();
-    // Build Augmented Matrix
-    let mut mat: Vec<Vec<i64>> = coeffs.iter().enumerate()
-        .map(|(i, row)| {
-            let mut r = row.clone();
-            r.push(target[i]);
-            r
-        }).collect();
-
-    // Forward Elimination
-    for i in 0..size {
-        if mat[i][i] == 0 {
-            let mut swapped = false;
-            for k in i+1..size {
-                if mat[k][i] != 0 {
-                    mat.swap(i, k);
-                    swapped = true;
-                    break;
-                }
-            }
-            if !swapped { return None; }
-        }
-        for k in i+1..size {
-            let pivot = mat[i][i];
-            let target_val = mat[k][i];
-            if target_val == 0 { continue; }
-            let row_i = mat[i].clone();
-            for j in i..=size {
-                mat[k][j] = (pivot * mat[k][j]) - (target_val * row_i[j]);
-            }
-        }
-    }
-
-    // Back Substitution
-    let mut x = vec![0; size];
-    for i in (0..size).rev() {
-        let mut sum = 0;
-        for j in i+1..size {
-            sum += mat[i][j] * x[j];
-        }
-        let rhs = mat[i][size] - sum;
-        let coeff = mat[i][i];
-        if coeff == 0 || rhs % coeff != 0 { return None; }
-        x[i] = rhs / coeff;
-    }
-    Some(x)
 }
 
 /// To solve the minimum number of button presses that satisfy the joltage
@@ -497,9 +391,9 @@ fn solve_square_system(coeffs: &Vec<Vec<i64>>, target: &Vec<i64>) -> Option<Vec<
 /// In other words as we increment D from 0 to infinity. If D = 1 solves to 11
 /// button presses and D = 2 solves to 13 button presses, I think it's safe to
 /// stop and say that D = 2 is the minimum.
-/// 
-/// 
-fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> i64 {
+///
+///
+fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> f64 {
     let mut matrix = Vec::new();
     for (jolt_idx, &jolt_value) in m.jolts.iter().enumerate() {
         let mut row: Vec<_> = m
@@ -516,125 +410,44 @@ fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> i64 {
         row.push(jolt_value as f64);
         matrix.push(row);
     }
-    let original_matrix = matrix.clone();
-    dbg!(&matrix);
-    let pivots = rref(&mut matrix);
-    let independent_vars: Vec<_> = (0..matrix[0].len() - 1)
-        .filter(|i| !pivots.contains(i))
-        .collect();
-    let mut independent_vars: Vec<_> = independent_vars
-        .iter()
-        .map(|&var| {
-            let (min, max) = get_global_bounds(var, &matrix, &pivots);
-            (var, min as usize..(max + 1.0) as usize)
-        })
-        .collect();
-    independent_vars.sort_by_key(|(_, bounds)| cmp::Reverse(bounds.len()));
-    dbg!(&independent_vars);
 
-    let target: Vec<_> = m.jolts.iter().map(|&i| i as i64).collect();
-    let dep_indices = pivots.clone();
-    let dep_matrix:Vec<Vec<_>> = (0..target.len()).map(|target_idx| {
-        dep_indices.iter().map(|&button_idx| (m.buttons[button_idx] & (1 << target_idx) != 0) as i64).collect()
-    }).collect();
-    dbg!(&dep_matrix);
+    let (rref, pivots) = rref(matrix);
+    let free_vars: Vec<_> = (0..m.buttons.len())
+        .filter(|idx| !pivots.contains(idx))
+        .collect();
+    let constraints = parse_rref_into_constraints(&rref, &pivots, m.buttons.len());
+    // We know that it should never take more button presses than the maximum
+    // value required for any individual joltage counter.
+    let max_button_presses = m.jolts.iter().copied().max().unwrap() as f64;
 
-    let min_presses = recursive_solve(
-        &m.buttons,
-        &dep_matrix,
-        &independent_vars,
+    // Our result will be stored in min_button_presses by the recursive algorithm.
+    let mut min_button_presses = f64::MAX;
+    recursive_find_min_button_presses(
+        &rref,
+        &pivots,
+        &constraints,
         0,
-        target,
-        0
+        &free_vars,
+        &mut vec![0.0; free_vars.len()],
+        max_button_presses,
+        &mut min_button_presses,
     );
-    match min_presses {
-        Some(x) => x,
-        None => panic!("no solution"),
+    if min_button_presses == f64::MAX {
+        panic!("unable to solve for machine: {m:?}");
     }
-}
-    /*
-
-    let mut independent_var_state: Vec<_> = independent_vars
-        .iter()
-        .map(|(_, bounds)| bounds.start)
-        .collect();
-
-    let mut min = f64::MAX;
-    let mut last_min_change = -1;
-    for idx in 0.. {
-        if last_min_change >= 0 && idx - last_min_change > 10000 {
-            break;
-        }
-        increment_independent_vars(&independent_vars, &mut independent_var_state);
-        let iv: HashMap<_, _> = independent_vars
-            .iter()
-            .zip(independent_var_state.iter())
-            .map(|((idx, _range), &value)| (*idx, value as f64))
-            .collect();
-        //dbg!(&iv);
-        let solution = solve_system(&matrix, &pivots, &iv);
-        let button_presses: f64 = solution.iter().sum();
-        //dbg!(&solution);
-        //if solution.iter().any(|&v| v.round() < 0.0 || (v - v.round()).abs() > 0.1) {
-        if solution.iter().any(|&v| v.round() < 0.0) || (button_presses - button_presses.round()).abs() > 0.1 {
-            dbg!(button_presses);
-            if button_presses.round() >= 87.0 && button_presses < 88.0 {
-                eprintln!("matrix: {original_matrix:?}");
-                eprintln!("rref: {matrix:?}");
-                eprintln!("independent_vars: {independent_vars:?}");
-                eprintln!("machine: {m:?}");
-                eprintln!("{solution:?}");
-                eprintln!("solution invalid: {}", solution.iter().map(|v| v.round()).sum::<f64>());
-                dbg!(solution);
-            }
-            continue;
-        }
-        if button_presses < min {
-            min = button_presses;
-            last_min_change = idx;
-            let mut solution_joltage = vec![0; m.jolts.len()];
-            for (&v, &button) in solution.iter().zip(m.buttons.iter()) {
-                for jolt_idx in 0..m.jolts.len() {
-                    if button & (1 << jolt_idx) > 0 {
-                        solution_joltage[jolt_idx] += v.round() as usize;
-                    }
-                }
-            }
-            if solution_joltage != m.jolts {
-                eprintln!("matrix: {original_matrix:?}");
-                eprintln!("rref: {matrix:?}");
-                eprintln!("independent_vars: {independent_vars:?}");
-                eprintln!("machine: {m:?}");
-                eprintln!("{solution:?}");
-                panic!("solution invalid: {solution_joltage:?} does not equal {:?}", m.jolts);
-            }
-        }
-    }
-    if last_min_change == -1 {
-        panic!("no solution found for machine: {m:?}");
-    }
-    dbg!(min) as usize
-}
-    */
-
-
-fn increment_independent_vars(vars: &[(usize, Range<usize>)], state: &mut Vec<usize>) {
-    for (idx, var_state) in state.iter_mut().enumerate().rev() {
-        *var_state += 1;
-        if *var_state < vars[idx].1.end {
-            return;
-        }
-        *var_state = vars[idx].1.start;
-    }
+    min_button_presses
 }
 
 #[aoc(day10, part2)]
-fn part2(input: &str) -> i64 {
-    let input = EXAMPLE;
+fn part2(input: &str) -> u64 {
     let machines: Vec<_> = input
         .lines()
         .map(|input| Machine::from_str(input).unwrap())
         .collect();
 
-    machines.iter().map(solve_min_button_presses_to_satisfy_jolt).sum()
+    machines
+        .iter()
+        .map(solve_min_button_presses_to_satisfy_jolt)
+        .sum::<f64>()
+        .round() as u64
 }

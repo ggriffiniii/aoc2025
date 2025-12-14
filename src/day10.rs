@@ -47,6 +47,27 @@ impl FromStr for Machine {
     }
 }
 
+trait FloatExt {
+    fn is_zero(self) -> bool;
+
+    fn is_int(self) -> Option<i64>;
+}
+impl FloatExt for f64 {
+    fn is_zero(self) -> bool {
+        const EPSILON: f64 = 1e-9;
+        self.abs() < EPSILON
+    }
+
+    fn is_int(self) -> Option<i64> {
+        let r = self.round();
+        if (self - r).is_zero() {
+            Some(r as i64)
+        } else {
+            None
+        }
+    }
+}
+
 fn find_min_button_presses(m: &Machine) -> usize {
     struct SearchState {
         lights: u16,
@@ -89,8 +110,6 @@ fn part1(input: &str) -> usize {
     machines.iter().map(find_min_button_presses).sum()
 }
 
-const EPSILON: f64 = 1e-9;
-
 #[derive(Debug, Clone)]
 pub struct Constraint {
     // The coefficients for your independent variables (e.g., indices 10 and 11)
@@ -113,7 +132,7 @@ pub fn parse_rref_into_constraints(
         let free_var_idx = matrix_row
             .iter()
             .enumerate()
-            .filter(|&(_idx, &v)| v != 0.0)
+            .filter(|&(_idx, &v)| !v.is_zero())
             .map(|(idx, _v)| idx)
             .next();
 
@@ -158,7 +177,7 @@ pub fn rref(mut matrix: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<usize>) {
         }
 
         // If the column is effectively all zeros, skip it (it's a free variable)
-        if max_val < EPSILON {
+        if max_val.is_zero() {
             continue;
         }
 
@@ -176,11 +195,11 @@ pub fn rref(mut matrix: Vec<Vec<f64>>) -> (Vec<Vec<f64>>, Vec<usize>) {
         for i in 0..rows {
             if i != pivot_row {
                 let factor = matrix[i][col];
-                if factor.abs() > EPSILON {
+                if !factor.is_zero() {
                     for j in col..cols {
                         matrix[i][j] -= factor * matrix[pivot_row][j];
 
-                        if matrix[i][j].abs() < EPSILON {
+                        if matrix[i][j].is_zero() {
                             matrix[i][j] = 0.0;
                         }
                     }
@@ -247,7 +266,7 @@ fn recursive_find_min_button_presses(
             solve_dependent_vars(rref, pivots, free_vars_indices, free_vars_values);
         if all_var_values
             .iter()
-            .any(|value| value.round() < 0.0 || (value - value.round()).abs() > EPSILON)
+            .any(|value| value.is_int().filter(|&v| v >= 0).is_none())
         {
             // Can't have negative or fractional button pushes.
             return;
@@ -279,7 +298,7 @@ fn recursive_find_min_button_presses(
                     if idx < depth {
                         current_rhs -= coeff * free_vars_values[idx];
                     }
-                    if coeff.abs() < EPSILON {
+                    if coeff.is_zero() {
                         continue;
                     }
                     if coeff < 0.0 {
@@ -452,6 +471,7 @@ fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> f64 {
     }
 
     let (rref, pivots) = rref(matrix);
+
     let free_vars: Vec<_> = (0..m.buttons.len())
         .filter(|idx| !pivots.contains(idx))
         .collect();
@@ -479,7 +499,7 @@ fn solve_min_button_presses_to_satisfy_jolt(m: &Machine) -> f64 {
 }
 
 #[aoc(day10, part2)]
-fn part2(input: &str) -> u64 {
+fn part2(input: &str) -> i64 {
     let machines: Vec<_> = input
         .lines()
         .map(|input| Machine::from_str(input).unwrap())
@@ -489,5 +509,6 @@ fn part2(input: &str) -> u64 {
         .iter()
         .map(solve_min_button_presses_to_satisfy_jolt)
         .sum::<f64>()
-        .round() as u64
+        .is_int()
+        .unwrap()
 }
